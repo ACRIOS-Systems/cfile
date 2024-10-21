@@ -120,7 +120,7 @@ class CFactory:
                  static: bool = False,
                  const: bool = False,  # This is not const of the return type
                  extern: bool = False,
-                 params: core.Variable | list[core.Variable] | None = None) -> core.Function:
+                 params: list[core.Variable] = []) -> core.Function:
         """
         New function
         """
@@ -137,6 +137,23 @@ class CFactory:
         """
         return core.Type(type_ref, const, pointer, volatile, array)
 
+    def enum_member(self,
+                    name: str,
+                    value: int | None = None):
+        """
+        New EnumMember
+        """
+        return core.EnumMember(name, value)
+
+    def enum(self,
+             name: str,
+             members: list[core.EnumMember] = [],
+             attributes: list[str] = []):
+        """
+        New Enum
+        """
+        return core.Enum(name, members, attributes)
+
     def struct_member(self,
                       name: str,
                       data_type: str | core.Type | core.Struct,
@@ -150,12 +167,13 @@ class CFactory:
 
     def struct(self,
                name: str,
-               members: core.StructMember | list[core.StructMember] | None = None
+               members: list[core.StructMember] = [],
+               attributes: list[str] = []
                ) -> core.Struct:
         """
         New Struct
         """
-        return core.Struct(name, members)
+        return core.Struct(name, members, attributes)
 
     def variable(self,
                  name: str,
@@ -224,6 +242,7 @@ class CFactory:
     def declaration(self,
                     element: Union[core.Variable, core.Function, core.DataType],
                     init_value: Any | None = None) -> core.Declaration:
-
-        """New declaration"""
+        """
+        New declaration
+        """
         return core.Declaration(element, init_value)

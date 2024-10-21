@@ -136,7 +136,7 @@ class DataType(Element):
     """
     Base class for all data types
     """
-    def __init__(self, name: str | None) -> None:
+    def __init__(self, name: str = "") -> None:
         self.name = name
 
 
@@ -150,7 +150,7 @@ class Type(DataType):
                  pointer: bool = False,
                  volatile: bool = False,
                  array: int | None = None) -> None:  # Only used for typedefs to other array types
-        super().__init__(None)
+        super().__init__("")
         self.base_type = base_type
         self.const = const
         self.volatile = volatile
@@ -168,6 +168,45 @@ class Type(DataType):
         else:
             raise KeyError(name)
 
+class EnumMember(Element):
+    """
+    Enum element.
+    """
+
+    def __init__(self,
+                 name: str,
+                 value: int | None) -> None:
+        self.name = name
+        self.value = value
+
+
+class Enum(DataType):
+    """
+    A enum definition
+    """
+
+    def __init__(self, name: str, members: list[EnumMember] = [], attributes: list[str] = []) -> None:
+        super().__init__(name)
+        if isinstance(members, list):
+            self.members: list[EnumMember] = members.copy()
+            enumValue = -1
+            for enum in self.members:
+                if enum.value == None:
+                    enumValue += 1
+                    enum.value = enumValue
+                else:
+                    enumValue = enum.value
+        else:
+            raise TypeError('Invalid argument type for "elements"')
+        self.attributes = attributes.copy()
+
+    def append(self, member: EnumMember) -> None:
+        """
+        Appends new element to the struct definition
+        """
+        if not isinstance(member, EnumMember):
+            raise TypeError(f'Invalid type, expected "EnumMember", got {str(type(member))}')
+        self.members.append(member)
 
 class StructMember(Element):
     """
@@ -197,17 +236,13 @@ class Struct(DataType):
     """
     A struct definition
     """
-    def __init__(self, name: str | None, members: StructMember | list[StructMember] | None = None) -> None:
+    def __init__(self, name: str = "", members: list[StructMember] = [], attributes: list[str] = []) -> None:
         super().__init__(name)
-        self.members: list[StructMember] = []
-        if members is not None:
-            if isinstance(members, StructMember):
-                self.append(members)
-            elif isinstance(members, list):
-                for member in members:
-                    self.append(member)
-            else:
-                raise TypeError('Invalid argument type for "elements"')
+        if isinstance(members, list):
+            self.members: list[StructMember] = members.copy()
+        else:
+            raise TypeError('Invalid argument type for "elements"')
+        self.attributes = attributes.copy()
 
     def append(self, member: StructMember) -> None:
         """
@@ -322,7 +357,7 @@ class Function(Element):
                  static: bool = False,
                  const: bool = False,  # const function (as seen in C++)
                  extern: bool = False,
-                 params: Variable | list[Variable] | None = None) -> None:
+                 params: list[Variable] = []) -> None:
         self.name = name
         self.static = static
         self.const = const
@@ -335,13 +370,7 @@ class Function(Element):
             self.return_type = Type("void")
         else:
             raise TypeError(str(type(return_type)))
-        self.params: list[Variable] = []
-        if params is not None:
-            if isinstance(params, Variable):
-                self.append(params)
-            elif isinstance(params, list):
-                for param in params:
-                    self.append(param)
+        self.params = params.copy()
 
     def append(self, param: Variable) -> "Function":
         """
