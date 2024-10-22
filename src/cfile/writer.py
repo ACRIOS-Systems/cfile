@@ -452,6 +452,8 @@ class Writer(Formatter):
             self._write("const ")
         if isinstance(elem.base_type, core.Type):
             self._write_type_declaration(elem.base_type)
+        elif isinstance(elem.base_type, core.Enum):
+            self._write_enum_usage(elem.base_type)
         elif isinstance(elem.base_type, core.Struct):
             self._write_struct_usage(elem.base_type)
         elif isinstance(elem.base_type, core.Declaration):
@@ -513,6 +515,8 @@ class Writer(Formatter):
             self._write("static ")
         if isinstance(elem.return_type, core.Type):
             self._write_type_declaration(elem.return_type)
+        elif isinstance(elem.return_type, core.Enum):
+            self._write_enum_usage(elem.return_type)
         elif isinstance(elem.return_type, core.Struct):
             self._write_struct_usage(elem.return_type)
         else:
