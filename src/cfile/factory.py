@@ -246,3 +246,9 @@ class CFactory:
         New declaration
         """
         return core.Declaration(element, init_value)
+
+    def condition(self, condition:str, type:core.ConditionType):
+        """
+        New condition
+        """
+        return core.Condition(condition, type)

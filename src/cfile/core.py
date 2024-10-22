@@ -540,3 +540,22 @@ class Block(Sequence):
     """
     A sequence wrapped in braces
     """
+
+
+class ConditionType(Enum):
+    IF = 0
+    ELSE_IF = 1
+    ELSE = 2
+
+
+class Condition(Block):
+    """
+    A condition wrapped in braces
+    """
+    def __init__(self, condition: str = "", type: ConditionType = ConditionType.ELSE):
+        super().__init__()
+        self.condition = condition
+        self.type = type
+
+        if (condition and type == ConditionType.ELSE) or (not condition and type != ConditionType.ELSE):
+            raise Exception("Condition and type didn't match")

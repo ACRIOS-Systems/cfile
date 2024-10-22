@@ -76,8 +76,11 @@ class Formatter:
             self.indentation_str = self.indentation_char * \
                 (self.indentation_level * self.indent_width)
 
-    def _start_line(self):
-        self.fh.write(self.indentation_str)
+    def _start_line(self, indent:bool = True):
+        if indent:
+            self.fh.write(self.indentation_str)
+        else:
+            self.fh.write("")
 
     def _write(self, text):
         self.fh.write(text)
@@ -125,6 +128,7 @@ class Writer(Formatter):
             "IfndefDirective": self._write_ifndef_directive,
             "EndifDirective": self._write_endif_directive,
             "Extern": self._write_extern,
+            "Condition": self._write_condition,
         }
         self.last_element = ElementType.NONE
 
@@ -184,6 +188,9 @@ class Writer(Formatter):
                 self._start_line()
                 self._write_line_comment(elem)
                 self._eol()
+            elif isinstance(elem, core.Condition):
+                self._start_line()
+                self._write_condition(elem)
             elif isinstance(elem, core.Block):
                 self._start_line()
                 self._write_block(elem)
@@ -191,7 +198,10 @@ class Writer(Formatter):
                 self._start_line()
                 self._write_line_element(elem)
             else:
-                self._start_line()
+                if isinstance(elem, core.Blank):
+                    self._start_line(False)
+                else:
+                    self._start_line()
                 class_name = elem.__class__.__name__
                 write_method = self.switcher_all.get(class_name, None)
                 if write_method is not None:
@@ -762,3 +772,12 @@ class Writer(Formatter):
     def _write_extern(self, elem: core.Extern) -> None:
         self._write(f'extern "{elem.language}"')
         self.last_element = ElementType.DIRECTIVE
+
+    def _write_condition(self, elem:core.Condition) -> None:
+        if elem.type == core.ConditionType.IF:
+            self._write(f"if ({elem.condition})")
+        elif elem.type == core.ConditionType.ELSE_IF:
+            self._write(f"else if ({elem.condition})")
+        elif elem.type == core.ConditionType.ELSE:
+            self._write(f"else")
+        self._write_block(elem)
