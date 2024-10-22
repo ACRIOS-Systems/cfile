@@ -515,6 +515,8 @@ class Writer(Formatter):
             self._write("static ")
         if isinstance(elem.return_type, core.Type):
             self._write_type_declaration(elem.return_type)
+        if isinstance(elem.return_type, core.TypeDef):
+            self._write_typedef_usage(elem.return_type)
         elif isinstance(elem.return_type, core.Enum):
             self._write_enum_usage(elem.return_type)
         elif isinstance(elem.return_type, core.Struct):
