@@ -328,6 +328,8 @@ class Writer(Formatter):
             self._write(str(value))
         elif isinstance(value, str):
             self._write(f'"{value}"')
+        elif isinstance(value, core.EnumMember):
+            self._write(f'{value.name}')
         else:
             raise NotImplementedError(str(type(value)))
 
@@ -448,7 +450,7 @@ class Writer(Formatter):
         """
         Writes typedef usage
         """
-        if elem.name == "":
+        if not elem.name:
             raise ValueError("Typedef without name detected")
         self._write(elem.name)
 
@@ -511,7 +513,7 @@ class Writer(Formatter):
         """
         Writes function usage (name of the function)
         """
-        if elem.name == "":
+        if not elem.name:
             raise ValueError("Function with no name detected")
         self._write(elem.name)
 
@@ -525,7 +527,7 @@ class Writer(Formatter):
             self._write("static ")
         if isinstance(elem.return_type, core.Type):
             self._write_type_declaration(elem.return_type)
-        if isinstance(elem.return_type, core.TypeDef):
+        elif isinstance(elem.return_type, core.TypeDef):
             self._write_typedef_usage(elem.return_type)
         elif isinstance(elem.return_type, core.Enum):
             self._write_enum_usage(elem.return_type)
@@ -625,7 +627,7 @@ class Writer(Formatter):
         """
         Writes enum usage
         """
-        if elem.name == "":
+        if not elem.name:
             raise ValueError("enum doesn't have a name. Did you mean to use a declaration?")
         self._write(f"enum {elem.name}")
 
@@ -666,7 +668,7 @@ class Writer(Formatter):
         """
         Writes struct usage
         """
-        if elem.name == "":
+        if not elem.name:
             raise ValueError("struct doesn't have a name. Did you mean to use a declaration?")
         self._write(f"struct {elem.name}")
 

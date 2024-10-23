@@ -120,7 +120,7 @@ class CFactory:
                  static: bool = False,
                  const: bool = False,  # This is not const of the return type
                  extern: bool = False,
-                 params: list[core.Variable] = []) -> core.Function:
+                 params: list[core.Variable] | None = None) -> core.Function:
         """
         New function
         """
@@ -147,8 +147,8 @@ class CFactory:
 
     def enum(self,
              name: str,
-             members: list[core.EnumMember] = [],
-             attributes: list[str] = []):
+             members: list[core.EnumMember] | None = None,
+             attributes: list[str] | None = None):
         """
         New Enum
         """
@@ -167,8 +167,8 @@ class CFactory:
 
     def struct(self,
                name: str,
-               members: list[core.StructMember] = [],
-               attributes: list[str] = []
+               members: list[core.StructMember] | None = None,
+               attributes: list[str] | None = None
                ) -> core.Struct:
         """
         New Struct
