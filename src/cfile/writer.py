@@ -21,14 +21,16 @@ class ElementType(Enum):
     STRUCT_DECLARATION = 5   # Should this be separate from type declaration?
     VARIABLE_DECLARATION = 6
     FUNCTION_DECLARATION = 7
-    TYPEDEF = 8
-    TYPE_INSTANCE = 9
-    STRUCT_INSTANCE = 10
-    VARIABLE_USAGE = 11
-    FUNCTION_CALL = 12
-    STATEMENT = 13
-    BLOCK_START = 14
-    BLOCK_END = 15
+    UNION_DECLARATION = 8
+    TYPEDEF = 9
+    TYPE_INSTANCE = 10
+    STRUCT_INSTANCE = 11
+    UNION_INSTANCE = 12
+    VARIABLE_USAGE = 13
+    FUNCTION_CALL = 14
+    STATEMENT = 15
+    BLOCK_START = 16
+    BLOCK_END = 17
 
 
 class Formatter:
@@ -76,7 +78,7 @@ class Formatter:
             self.indentation_str = self.indentation_char * \
                 (self.indentation_level * self.indent_width)
 
-    def _start_line(self, indent:bool = True):
+    def _start_line(self, indent: bool = True):
         if indent:
             self.fh.write(self.indentation_str)
         else:
@@ -128,7 +130,10 @@ class Writer(Formatter):
             "IfndefDirective": self._write_ifndef_directive,
             "EndifDirective": self._write_endif_directive,
             "Extern": self._write_extern,
-            "Condition": self._write_condition,
+            "Conditions": self._write_conditions,
+            "Switch": self._write_switch,
+            "Break": self._write_break,
+            "Union": self._write_union_usage,
         }
         self.last_element = ElementType.NONE
 
@@ -188,15 +193,18 @@ class Writer(Formatter):
                 self._start_line()
                 self._write_line_comment(elem)
                 self._eol()
-            elif isinstance(elem, core.Condition):
-                self._start_line()
-                self._write_condition(elem)
+            elif isinstance(elem, core.Conditions):
+                self._write_conditions(elem)
+            elif isinstance(elem, core.Switch):
+                self._write_switch(elem)
             elif isinstance(elem, core.Block):
                 self._start_line()
                 self._write_block(elem)
             elif isinstance(elem, core.Line):
                 self._start_line()
                 self._write_line_element(elem)
+            elif isinstance(elem, core.Break):
+                self._write_break(elem)
             else:
                 if isinstance(elem, core.Blank):
                     self._start_line(False)
@@ -296,6 +304,8 @@ class Writer(Formatter):
             self._write_enum_declaration(elem.element)
         elif isinstance(elem.element, core.Struct):
             self._write_struct_declaration(elem.element)
+        elif isinstance(elem.element, core.Union):
+            self._write_union_declaration(elem.element)
         elif isinstance(elem.element, core.Variable):
             self._write_variable_declaration(elem.element)
         elif isinstance(elem.element, core.Function):
@@ -324,10 +334,14 @@ class Writer(Formatter):
         """
         Writes initializer member
         """
-        if isinstance(value, int):
+        if isinstance(value, bool):
+            self._write(str(value).lower())
+        elif isinstance(value, int):
             self._write(str(value))
         elif isinstance(value, str):
             self._write(f'"{value}"')
+        elif isinstance(value, core.EnumMember):
+            self._write(f'{value.name}')
         else:
             raise NotImplementedError(str(type(value)))
 
@@ -401,6 +415,8 @@ class Writer(Formatter):
             self._write_enum_usage(elem.data_type)
         elif isinstance(elem.data_type, core.Struct):
             self._write_struct_usage(elem.data_type)
+        elif isinstance(elem.data_type, core.Union):
+            self._write_union_usage(elem.data_type)
         elif isinstance(elem.data_type, core.Declaration):
             self._write_declaration(elem.data_type)
         elif isinstance(elem.data_type, core.TypeDef):
@@ -448,7 +464,7 @@ class Writer(Formatter):
         """
         Writes typedef usage
         """
-        if elem.name == "":
+        if not elem.name:
             raise ValueError("Typedef without name detected")
         self._write(elem.name)
 
@@ -462,56 +478,65 @@ class Writer(Formatter):
             self._write("const ")
         if isinstance(elem.base_type, core.Type):
             self._write_type_declaration(elem.base_type)
+        elif isinstance(elem.base_type, core.TypeDef):
+            self._write(elem.base_type.name)
         elif isinstance(elem.base_type, core.Enum):
             self._write_enum_usage(elem.base_type)
         elif isinstance(elem.base_type, core.Struct):
             self._write_struct_usage(elem.base_type)
+        elif isinstance(elem.base_type, core.Union):
+            self._write_union_usage(elem.base_type)
         elif isinstance(elem.base_type, core.Declaration):
-            self._write_declaration(elem.base_type)
+            baseType = elem.base_type
+            if isinstance(elem.base_type.element, core.Function):
+                baseType = core.Declaration(core.Function("(*"+elem.name+")", elem.base_type.element.return_type, elem.base_type.element.static,
+                                            elem.base_type.element.const, elem.base_type.element.extern, elem.base_type.element.params))
+            self._write_declaration(baseType)
         else:
             raise NotImplementedError(str(type(elem.base_type)))
-        result = ""
-        if elem.pointer:
-            if elem.const:
-                if self.style.space_around_pointer_qualifiers == c_style.SpaceLocation.DEFAULT:
+        if not (isinstance(elem.base_type, core.Declaration) and isinstance(elem.base_type.element, core.Function)):
+            result = ""
+            if elem.pointer:
+                if elem.const:
+                    if self.style.space_around_pointer_qualifiers == c_style.SpaceLocation.DEFAULT:
+                        if self.style.pointer_alignment == c_style.Alignment.LEFT:
+                            result += "* const "
+                        elif self.style.pointer_alignment == c_style.Alignment.RIGHT:
+                            result += "*const "
+                        elif self.style.pointer_alignment == c_style.Alignment.MIDDLE:
+                            result += " * const "
+                        else:
+                            raise ValueError(self.style.pointer_alignment)
+                    else:
+                        raise NotImplementedError("Only default space location supported for pointer qualifiers")
+                else:
                     if self.style.pointer_alignment == c_style.Alignment.LEFT:
-                        result += "* const "
+                        result += "* "
                     elif self.style.pointer_alignment == c_style.Alignment.RIGHT:
-                        result += "*const "
+                        if isinstance(elem.base_type, core.Type) and elem.base_type.pointer:
+                            result += "*"
+                        else:
+                            result += " *"
                     elif self.style.pointer_alignment == c_style.Alignment.MIDDLE:
-                        result += " * const "
+                        result += " * "
                     else:
                         raise ValueError(self.style.pointer_alignment)
-                else:
-                    raise NotImplementedError("Only default space location supported for pointer qualifiers")
             else:
-                if self.style.pointer_alignment == c_style.Alignment.LEFT:
-                    result += "* "
-                elif self.style.pointer_alignment == c_style.Alignment.RIGHT:
-                    if isinstance(elem.base_type, core.Type) and elem.base_type.pointer:
-                        result += "*"
-                    else:
-                        result += " *"
-                elif self.style.pointer_alignment == c_style.Alignment.MIDDLE:
-                    result += " * "
-                else:
-                    raise ValueError(self.style.pointer_alignment)
-        else:
-            if not ((isinstance(elem.base_type, core.Type) and elem.base_type.pointer) and (
-                    self.style.pointer_alignment == c_style.Alignment.RIGHT)):
-                result += " "
-        assert elem.name is not None
-        result += elem.name
-        if elem.array is not None:
-            result += f"[{elem.array}]"
-        self._write(result)
+                if not ((isinstance(elem.base_type, core.Type) and elem.base_type.pointer) and (
+                        self.style.pointer_alignment == c_style.Alignment.RIGHT)):
+                    result += " "
+            assert elem.name is not None
+            result += elem.name
+            if elem.array is not None:
+                result += f"[{elem.array}]"
+            self._write(result)
         self.last_element = ElementType.TYPEDEF
 
     def _write_function_usage(self, elem: core.Function) -> None:
         """
         Writes function usage (name of the function)
         """
-        if elem.name == "":
+        if not elem.name:
             raise ValueError("Function with no name detected")
         self._write(elem.name)
 
@@ -525,12 +550,14 @@ class Writer(Formatter):
             self._write("static ")
         if isinstance(elem.return_type, core.Type):
             self._write_type_declaration(elem.return_type)
-        if isinstance(elem.return_type, core.TypeDef):
+        elif isinstance(elem.return_type, core.TypeDef):
             self._write_typedef_usage(elem.return_type)
         elif isinstance(elem.return_type, core.Enum):
             self._write_enum_usage(elem.return_type)
         elif isinstance(elem.return_type, core.Struct):
             self._write_struct_usage(elem.return_type)
+        elif isinstance(elem.return_type, core.Union):
+            self._write_union_usage(elem.return_type)
         else:
             raise NotImplementedError(str(type(elem.return_type)))
         self._write(f" {elem.name}(")
@@ -625,7 +652,7 @@ class Writer(Formatter):
         """
         Writes enum usage
         """
-        if elem.name == "":
+        if not elem.name:
             raise ValueError("enum doesn't have a name. Did you mean to use a declaration?")
         self._write(f"enum {elem.name}")
 
@@ -666,7 +693,7 @@ class Writer(Formatter):
         """
         Writes struct usage
         """
-        if elem.name == "":
+        if not elem.name:
             raise ValueError("struct doesn't have a name. Did you mean to use a declaration?")
         self._write(f"struct {elem.name}")
 
@@ -704,6 +731,10 @@ class Writer(Formatter):
             self._write_type_declaration(elem.data_type)
         elif isinstance(elem.data_type, core.Struct):
             self._write_struct_usage(elem.data_type)
+        elif isinstance(elem.data_type, core.Union):
+            self._write_union_usage(elem.data_type)
+        elif isinstance(elem.data_type, core.TypeDef):
+            self._write_typedef_usage(elem.data_type)
         else:
             raise NotImplementedError(str(type(elem.data_type)))
         result = ""
@@ -773,11 +804,131 @@ class Writer(Formatter):
         self._write(f'extern "{elem.language}"')
         self.last_element = ElementType.DIRECTIVE
 
-    def _write_condition(self, elem:core.Condition) -> None:
-        if elem.type == core.ConditionType.IF:
-            self._write(f"if ({elem.condition})")
-        elif elem.type == core.ConditionType.ELSE_IF:
-            self._write(f"else if ({elem.condition})")
-        elif elem.type == core.ConditionType.ELSE:
+    def _write_conditions(self, elem: core.Conditions) -> None:
+        elseCondition = None
+        firstCondition = False
+
+        for condition in elem.conditions:
+            if condition.condition == "":
+                if elseCondition == None:
+                    elseCondition = condition
+                    continue
+                else:
+                    raise ValueError("Empty condition (else) can be defined only once.")
+            self._start_line()
+            if not firstCondition:
+                firstCondition = True
+                self._write(f"if ({condition.condition})")
+            else:
+                self._write(f"else if ({condition.condition})")
+            self._write_block(condition)
+        if elseCondition:
+            self._start_line()
             self._write(f"else")
-        self._write_block(elem)
+            self._write_block(elseCondition)
+
+    def _write_switch(self, elem: core.Switch):
+        defaultCase = None
+        self._start_line()
+        if type(elem.switchVar) == core.Variable:
+            self._write(f"switch({elem.switchVar.name}){{")
+        else:
+            self._write(f"switch({elem.switchVar}){{")
+        self._eol()
+        self._indent()
+        for case in elem.cases:
+            if not case.cases:
+                if defaultCase == None:
+                    defaultCase = case
+                    continue
+                else:
+                    raise ValueError("Empty case (default) can be defined only once.")
+            firstCase = False
+            for condition in case.cases:
+                if not firstCase:
+                    firstCase = True
+                else:
+                    self._write_line("")
+                    self._eol()
+                self._start_line()
+                self._write(f"case {condition if type(condition) == int or type(condition) == str else condition.name}:")
+            self._write_block(case)
+        if defaultCase:
+            self._start_line()
+            self._write(f"default:")
+            self._write_block(defaultCase)
+        self._dedent()
+        self._start_line()
+        self._write("}")
+        self._eol()
+
+    def _write_break(self, elem: core.Break):
+        self._write("break")
+
+    def _write_union_member(self, elem: core.UnionMember):
+        """
+        Writes struct member
+        """
+        if isinstance(elem.data_type, core.Type):
+            self._write_type_declaration(elem.data_type)
+        elif isinstance(elem.data_type, core.Struct):
+            self._write_struct_usage(elem.data_type)
+        elif isinstance(elem.data_type, core.Union):
+            self._write_union_usage(elem.data_type)
+        elif isinstance(elem.data_type, core.TypeDef):
+            self._write_typedef_usage(elem.data_type)
+        elif isinstance(elem.data_type, str):
+            self._write(elem.data_type)
+        else:
+            raise NotImplementedError(str(type(elem.data_type))+" "+ elem.name)
+        result = ""
+        if elem.pointer:
+            if self.style.pointer_alignment == c_style.Alignment.LEFT:
+                result += "* "
+            elif self.style.pointer_alignment == c_style.Alignment.RIGHT:
+                if isinstance(elem.data_type, core.Type) and elem.data_type.pointer:
+                    result += "*"
+                else:
+                    result += " *"
+            elif self.style.pointer_alignment == c_style.Alignment.MIDDLE:
+                result += " * "
+            else:
+                raise ValueError(self.style.pointer_alignment)
+        else:
+            if not (isinstance(elem.data_type, core.Type) and elem.data_type.pointer and (
+                    self.style.pointer_alignment == c_style.Alignment.RIGHT)):
+                result += " "
+        result += elem.name
+        self._write(result)
+
+    def _write_union_usage(self, elem: core.Union):
+        """
+        Writes union usage
+        """
+        if not elem.name:
+            raise ValueError("union doesn't have a name. Did you mean to use a declaration?")
+        self._write(f"union {elem.name}")
+
+
+    def _write_union_declaration(self, elem: core.Union):
+        self._write(f"union{" ".join([' __attribute__(('+attribute+'))' for attribute in elem.attributes])} {elem.name}")
+        if self.style.brace_wrapping.after_struct:
+            self._eol()
+            self._start_line()
+            self._write("{")
+            self._eol()
+        else:
+            self._write(" {")
+            self._eol()
+        if len(elem.members):
+            self._indent()
+        for member in elem.members:
+            self._start_line()
+            self._write_union_member(member)
+            self._write(";")
+            self._eol()
+        if len(elem.members):
+            self._dedent()
+        self._start_line()
+        self._write("}")
+        self.last_element = ElementType.UNION_DECLARATION
